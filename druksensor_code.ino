@@ -43,7 +43,7 @@ float VoltageToPressure()
   Serial.print(F("pressure[kPa]="));
   Serial.println(pressure, 4);
 
-  return pressure;
+  return diff;
 }
 
 void PressureRead(float pressure)
