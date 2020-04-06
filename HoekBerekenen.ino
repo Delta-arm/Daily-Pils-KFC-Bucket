@@ -50,6 +50,15 @@ float i;
 float hoek;
 double radialen;
 
+const char bakje = 0;
+const char pilA = 1;
+const char pilB = 2;
+const char pilC = 3;
+
+char pilAcounter = 1;
+char pilBcounter = 8;
+char pilCcounter = 15;
+
 int j = 0;
 char PositionPill = 1; // positie van de pillen beginen bij de 2de positie in de array 
 char X = -10; // X positie van de pillen begint op X = -10
@@ -58,6 +67,8 @@ int Z = 150;  //de Z positie van de pillen zijn allemaal 150
 
 //prototypes
 void hoekberekenen(float Xbepalen,float Ybepalen,float Zbepalen);
+void pilselectie(char pilkeuze);
+void printpositie(int arraynumb);
 
 void setup() {
 
@@ -89,7 +100,7 @@ void setup() {
   }
   
   //testen van elke positie met elke hoek
-  for (j=0; j<22; j++)
+ /* for (j=0; j<22; j++)
   {
     Serial.print("positie");
     Serial.print(j);
@@ -100,12 +111,13 @@ void setup() {
     Serial.print(" Z= ");
     Serial.println(Posities[j][2]); 
     hoekberekenen(Posities[j][0],Posities[j][1],Posities[j][2]);
-  }
+  }*/
 }
 
 void loop() 
 {
-  
+  pilselectie(pilC);
+  delay(500);
 }
 
 //functie de van de X,Y,Z waardes de hoeken van de servo's berekent die daar bij horen 
@@ -117,7 +129,7 @@ void hoekberekenen(float Xbepalen, float Ybepalen, float Zbepalen)
   servo3hoek = 0;
 
   
-  for (hoek = -30; hoek<160 ; hoek = hoek + 0.1) //voorloep die er voor zorgt dat elke hoek tussen -30 en 160 graden gecontroleerd word
+  for (hoek = -30; hoek<160 ; hoek = hoek + 0.1) //for loop die er voor zorgt dat elke hoek tussen -30 en 160 graden gecontroleerd word
   {
     //omrekenen van grades naar radialen zodat je met de math library de sinus en de cosinus uit kan rekenen
     T = (float)hoek/(float)360;
@@ -201,4 +213,56 @@ void hoekberekenen(float Xbepalen, float Ybepalen, float Zbepalen)
       }
     } 
   }
+}
+
+//deze functie kijkt waar de delta arm heen moet en zorgt dat de juiste pil opgepakt wordt
+void pilselectie(char pilkeuze)
+{
+  //stuurt de delta arm naar het bakje 
+  if (pilkeuze == 0)  
+  {
+    Serial.println("delta arm naar bakje" );
+    printpositie(0);
+    hoekberekenen(Posities[0][0],Posities[0][1],Posities[0][2]);
+  }
+  //stuurt de delta arm naar pil A
+  else if (pilkeuze == 1)
+  {
+    Serial.println("Delta arm naar pil A");
+    printpositie(pilAcounter);
+    hoekberekenen(Posities[pilAcounter][0],Posities[pilAcounter][1],Posities[pilAcounter][2]);  
+    if (pilAcounter < 7) pilAcounter++; //zorgt er voor dat de delta arm alle 7 pillen afgaat 
+    else pilAcounter = 1; //zet de pillen teler weer op dag 1
+  }
+  //stuurt de delta arm naar pil B
+  else if (pilkeuze == 2)
+  {
+    Serial.println("Delta arm naar pil B");
+    printpositie(pilBcounter);
+    hoekberekenen(Posities[pilBcounter][0],Posities[pilBcounter][1],Posities[pilBcounter][2]);  
+    if (pilBcounter < 14) pilBcounter++; //zorgt er voor dat de delta arm alle 7 pillen afgaat
+    else pilBcounter = 8; //zet de pillen teler weer op dag 1
+  }
+  //stuurt de delta arm naar pil C
+  else if (pilkeuze == 3)
+  {
+    Serial.println("Delta arm naar pil C");
+    printpositie(pilCcounter);
+    hoekberekenen(Posities[pilCcounter][0],Posities[pilCcounter][1],Posities[pilCcounter][2]);  
+    if (pilCcounter < 21) pilCcounter++; //zorgt er voor dat de delta arm alle 7 pillen afgaat
+    else pilCcounter = 15;  //zet de pillen teler weer op dag 1
+  }
+}
+
+//deze funtie zorgt er voor dat de gekozen positie met de bijbehorende coördinaten op de serial monitor geprint wordt
+void printpositie(int arraynumb)
+{
+  Serial.print("positie");
+  Serial.print(arraynumb);
+  Serial.print(" X= ");
+  Serial.print(Posities[arraynumb][0]);
+  Serial.print(" Y= ");
+  Serial.print(Posities[arraynumb][1]);  
+  Serial.print(" Z= ");
+  Serial.println(Posities[arraynumb][2]);
 }
