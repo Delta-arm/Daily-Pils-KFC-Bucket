@@ -1,9 +1,711 @@
-void setup()
-{
+//library's
+#include <math.h>
+#include <Servo.h>
+#include <U8g2lib.h>
+#include "RTClib.h"
+#include <RCSwitch.h>
+#include <Wire.h>
 
+#define Aan HIGH
+#define Uit LOW
+#define SW_pin_1 11
+#define Y_pin_1 A2
+#define X_pin_1 A3
+#define Wacht_tijd 200
+#define Instel_Mogelijkheden 5
+#define Hoeveelheid_Pillen  4  // dit is een variable die aangeeft hoeveel pillen er in het systeem zitten.
+
+Servo MyServo[3];
+//globale variabele 
+int Posities [22][3];   //twee-dementionale array waar de X,Y,Z waardes in komen van de verschillende posities 
+
+float Ltop = 20;  // afstand tussen Pdoel en Ppols
+
+float afstands1;
+float afstands2;
+float afstands3;
+
+
+float ZPelleboog1 ;
+float XPelleboog1 ;
+float YPelleboog1 ;
+
+float ZPelleboog2 ;
+float XPelleboog2 ;
+float YPelleboog2 ;
+
+float ZPelleboog3 ;
+float XPelleboog3 ;
+float YPelleboog3 ;
+
+
+float ZPpols1;
+float XPpols1;
+float YPpols1;
+
+
+float ZPpols2;
+float XPpols2;
+float YPpols2;
+
+float ZPpols3;
+float XPpols3;
+float YPpols3;
+
+float servo1hoek;
+float servo2hoek;
+float servo3hoek;
+
+double T;
+double T1;
+float i;
+float hoek;
+double radialen;
+
+const char bakje = 0;
+const char pilA = 1;
+const char pilB = 2;
+const char pilC = 3;
+
+char pilAcounter = 1;
+char pilBcounter = 8;
+char pilCcounter = 15;
+
+int j = 0;
+char PositionPill = 1; // positie van de pillen beginen bij de 2de positie in de array 
+char X = -10; // X positie van de pillen begint op X = -10
+char Y;       
+int Z = 150;  //de Z positie van de pillen zijn allemaal 150 
+
+const int pinVplus = A0;                                           //hier wordt de Vout+ pin van de druksesnor op aangesloten
+const int pinVmin = A1;                                            //hier wordt de Vout- pin van de druksesnor op aangesloten
+const float offset = 0.0;                                          //het verschil tussen Vout+ en Vout-
+float pressure;                                                    //perameter voor de gemeten druk
+int setpoint[10];                                                  //dit zijn de verschillende xyz locaties waar de delta-arm naar toe moet
+int setpointEind;                                                  //dit is de loctaie waar de medicijn wordt gedosseert
+int motorOutput = 10;                                              //vacuümpomp wordt aangesloten op pin 10
+
+unsigned long Tijd_Nu = 0;
+int pil = 0;
+int pil_oud = 0;
+int tijd = 0;
+int tijd_oud = 0;
+int d = 0;
+unsigned long HAHA = 0;
+int Welke_Pil[4][6] = {           // Dit is voor het instellen van de datum dat de bepaalde pil moet worden ingenomen
+  {2020, 7, 5, 11, 4, 3},         // De getallen in de array staan voor:
+  {2020, 4, 6, 12, 0, 4},         // {Jaar, Maand, Dag, Uur, Minuut, Manier van innemen voor de patient}
+  {2020, 4, 6, 12, 0, 5},
+  {2020, 4, 6, 12, 0, 6}
+};
+int Welke_Pil_Oud;
+char ingesteld;
+char klaar = 0;
+
+char tijd_alarm = 20;
+int Zendt_Tijd = 300;
+char a = 0;
+char j;
+int buf;
+
+RTC_DS3231 rtc;   // tijd clock module die er gebruikt wordt.
+RCSwitch mySwitch = RCSwitch();  // Voor de RF module
+DateTime now = rtc.now() ;
+U8G2_ST7920_128X64_F_SW_SPI u8g2(U8G2_R0, /* clock=*/ 13, /* data=*/ 11, /* CS=*/ 10, /* reset=*/ 8);    // De pins waar de display op aangesloten moet.
+
+
+//prototypes
+void hoekberekenen(float Xbepalen,float Ybepalen,float Zbepalen);
+void pilselectie(char pilkeuze);
+void printpositie(int arraynumb);
+float VoltageToPressure();                                   //functie om de uitgaande spanning van de sensor om te rekenen naar druk 
+void PressureRead(float pressure);                           //functie om de met de gemeten druk t bepalen of er een medicijn is opgepakt
+
+void setup() {
+  pinMode(SW_pin_1, INPUT);
+  digitalWrite(SW_pin_1, HIGH);
+  pinMode (2, INPUT);
+  pinMode(3, INPUT);
+  rtc.begin();
+  Wire.begin();
+  u8g2.begin();
+  mySwitch.enableTransmit(10); // De zender moet verbonden worden op pin 10.
+
+  Serial.begin(9600);
+  pinMode(motorOutput, OUTPUT); 
+
+  //Servo's aan de aangewezen pinnen kopelen
+  MyServo[0].attach(5);
+  MyServo[1].attach(6);
+  MyServo[2].attach(7);
+
+  // positie van het bakje instellen 
+  Posities[0][0] = 0;
+  Posities[0][1] = 50;
+  Posities[0][2] = 130;
+
+  //positie van alle pillen instellen 
+  for(i=0; i<3;i++) // loop voor de 3 kolomen van de pilen 
+  {
+    Y = -20;
+    for(j=0; j<7; j++) // loop voor de 7 rijen van pillen elke dag 1  
+    {
+      Posities[PositionPill][0] = X;
+      Posities[PositionPill][1] = Y;
+      Posities[PositionPill][2] = Z;
+      Y = Y - 10;//elke pil zit 1cm uit elkaar
+      PositionPill++;
+    }
+    X = X + 10; //elke rij zit 1cm uit elkaar
+  }
+  
+  //testen van elke positie met elke hoek
+ /* for (j=0; j<22; j++)
+  {
+    Serial.print("positie");
+    Serial.print(j);
+    Serial.print(" X= ");
+    Serial.print(Posities[j][0]);
+    Serial.print(" Y= ");
+    Serial.print(Posities[j][1]);  
+    Serial.print(" Z= ");
+    Serial.println(Posities[j][2]); 
+    hoekberekenen(Posities[j][0],Posities[j][1],Posities[j][2]);
+  }*/
 }
 
-void loop()
+void loop() 
+{
+while(ingesteld = 0)
+  HAHA = millis();
+  Wat_Veranderd();
+  Tijd_Veranderen ();
+  Display_zonder_Display ();
+  Limiet_Array_Datum();
+  }
+  Het_Klaar_Zetten_Pil();
+  if(klaar == 1){
+  Alarm_Doorgeef();
+  }
+  delay(500);
+}
+
+//functie de van de X,Y,Z waardes de hoeken van de servo's berekent die daar bij horen 
+void hoekberekenen(float Xbepalen, float Ybepalen, float Zbepalen)
+{
+  //alle voorafgaande hoeken weer op 0 zeten
+  servo1hoek = 0;
+  servo2hoek = 0;
+  servo3hoek = 0;
+
+  
+  for (hoek = -30; hoek<160 ; hoek = hoek + 0.1) //for loop die er voor zorgt dat elke hoek tussen -30 en 160 graden gecontroleerd word
+  {
+    //omrekenen van grades naar radialen zodat je met de math library de sinus en de cosinus uit kan rekenen
+    T = (float)hoek/(float)360;
+    T1 = (float)T * (float)2;
+    radialen = (float)T1 * (float)M_PI;
+
+    //positie berekenen van de elleboog van servo 1
+    ZPelleboog1 = 60 * (sin(radialen));
+    XPelleboog1 = 100 + 60 * cos(radialen);
+    YPelleboog1 = 0;
+    //positie berekenen van de pols van servo 1
+    ZPpols1 = Zbepalen;
+    XPpols1 = Xbepalen + Ltop;
+    YPpols1 = Ybepalen;
+
+    //positie berekenen van de elleboog van servo 2
+    ZPelleboog2 = 60 * (sin(radialen));
+    XPelleboog2 = 100 - sin(1/3*M_PI)*60*cos(radialen);
+    YPelleboog2 = sin(1/3*M_PI)*60*cos(radialen);
+    //positie berekenen van de pols van servo 2
+    ZPpols2 = Zbepalen;
+    XPpols2 = Xbepalen - cos(1/3*M_PI)*Ltop;
+    YPpols2 = Ybepalen + sin(1/3*M_PI)*Ltop;
+
+    //positie berekenen van de elleboog van servo 3
+    ZPelleboog3 = 60 * (sin(radialen));
+    XPelleboog3 = 100 - cos(1/3*M_PI)*60*cos(radialen);
+    YPelleboog3 = 0 - sin(1/3*M_PI)*60*cos(radialen);
+    //positie berekenen van de pols van servo 3
+    ZPpols3 = Zbepalen;
+    XPpols3 = Xbepalen - cos(1/3*M_PI)*Ltop;
+    YPpols3 = Ybepalen - sin(1/3*M_PI)*Ltop;
+
+    //afstand bereken tussen de elleboog en de pols voor elke servo 
+    afstands1 = sqrt(sq((ZPelleboog1-ZPpols1))+sq((XPelleboog1-XPpols1))+sq((YPelleboog1-YPpols1)));
+    afstands2 = sqrt(sq((ZPelleboog2-ZPpols2))+sq((XPelleboog2-XPpols2))+sq((YPelleboog2-YPpols2)));
+    afstands3 = sqrt(sq((ZPelleboog3-ZPpols3))+sq((XPelleboog3-XPpols3))+sq((YPelleboog3-YPpols3)));
+
+    //controleren of de afstand tussen de elleboog en de pols van servo 1 de juiste lengete heeft 
+    if (afstands1>199.9 && afstands1<200.1)
+    {
+      if(servo1hoek == 0)
+      {
+        //de juiste hoek en afstand printen op de serial monitor
+        Serial.print("   Hoek = ");
+        Serial.print(hoek);
+        Serial.print("   Afstands1 = ");
+        Serial.println(afstands1);
+        servo1hoek = hoek;
+        MyServo[0].write(servo1hoek); //servo 1 naar de juiste hoek zetten 
+      } 
+    } 
+
+    //controleren of de afstand tussen de elleboog en de pols van servo 2 de juiste lengete heeft
+    if (afstands2>199.9 && afstands2<200.1)
+    {
+      if(servo2hoek == 0)
+      {
+        //de juiste hoek en afstand printen op de serial monitor
+        Serial.print("   Hoek = ");
+        Serial.print(hoek);
+        Serial.print("   Afstands2 = ");
+        Serial.println(afstands2);
+        servo2hoek = hoek;  
+        MyServo[1].write(servo2hoek); //servo 2 naar de juiste hoek zetten 
+      }
+    } 
+
+    //controleren of de afstand tussen de elleboog en de pols van servo 3 de juiste lengete heeft  
+    if (afstands3>199.9 && afstands3<200.1)
+    {
+      if(servo3hoek == 0)
+      {
+        //de juiste hoek en afstand printen op de serial monitor
+        Serial.print("   Hoek = ");
+        Serial.print(hoek);
+        Serial.print("   Afstands3 = ");
+        Serial.println(afstands3);
+        servo3hoek = hoek;
+        MyServo[2].write(servo3hoek); //servo 3 naar de juiste hoek zetten 
+      }
+    } 
+  }
+}
+
+//deze functie kijkt waar de delta arm heen moet en zorgt dat de juiste pil opgepakt wordt
+void pilselectie(char pilkeuze)
+{
+  While(klaar = 0)
+  //stuurt de delta arm naar pil A
+  else if (pilkeuze == 1)
+  {
+    Serial.println("Delta arm naar pil A");
+    printpositie(pilAcounter);
+    hoekberekenen(Posities[pilAcounter][0],Posities[pilAcounter][1],Posities[pilAcounter][2]);
+    bakje();
+    if (pilAcounter < 7) pilAcounter++; //zorgt er voor dat de delta arm alle 7 pillen afgaat 
+    else
+    { 
+      pilAcounter = 1; //zet de pillen teler weer op dag 1
+      klaar = 1;
+    }
+  }
+  //stuurt de delta arm naar pil B
+  else if (pilkeuze == 2)
+  {
+    Serial.println("Delta arm naar pil B");
+    printpositie(pilBcounter);
+    hoekberekenen(Posities[pilBcounter][0],Posities[pilBcounter][1],Posities[pilBcounter][2]);
+    bakje();
+    if (pilBcounter < 14) pilBcounter++; //zorgt er voor dat de delta arm alle 7 pillen afgaat
+    else
+    {
+      pilBcounter = 8; //zet de pillen teler weer op dag 1
+      klaar = 1;
+    }
+  }
+  //stuurt de delta arm naar pil C
+  else if (pilkeuze == 3)
+  {
+    Serial.println("Delta arm naar pil C");
+    printpositie(pilCcounter);
+    hoekberekenen(Posities[pilCcounter][0],Posities[pilCcounter][1],Posities[pilCcounter][2]);
+    bakje();
+    if (pilCcounter < 21) pilCcounter++; //zorgt er voor dat de delta arm alle 7 pillen afgaat
+    else 
+    {
+      pilCcounter = 15;  //zet de pillen teler weer op dag 1
+      klaar = 1;
+    }
+  }
+}
+
+//deze funtie zorgt er voor dat de gekozen positie met de bijbehorende coördinaten op de serial monitor geprint wordt
+void printpositie(int arraynumb)
+{
+  Serial.print("positie");
+  Serial.print(arraynumb);
+  Serial.print(" X= ");
+  Serial.print(Posities[arraynumb][0]);
+  Serial.print(" Y= ");
+  Serial.print(Posities[arraynumb][1]);  
+  Serial.print(" Z= ");
+  Serial.println(Posities[arraynumb][2]);
+}
+
+float VoltageToPressure()
+{
+  float vPlus = (float) analogRead(pinVplus) / 1023.0 * 5.0;       //lees de spanning uit op A0
+  float vMin = (float) analogRead(pinVmin) / 1023.0 * 5.0;         //lees de spanning uit op A1
+  Serial.print(F("vPlus[V]="));
+  Serial.println(vPlus, 4);
+  Serial.print(F("vMin[V]="));
+  Serial.println(vMin, 4);
+
+  float diff = vPlus - vMin;                                       //bereken het verschil tussen Vout+ en Vout-
+  diff -= offset;                                                  //het verschil wordt de nieuwe offset
+  Serial.print(F("diff[V]="));
+  Serial.println(diff, 4);
+ 
+  Serial.print(F("pressure[kPa]="));
+  Serial.println(pressure, 4);
+
+  return diff;
+}
+
+void PressureRead(float pressure)
+{
+  if(pressure >= 100000 && digitalRead(motorOutput == LOW))       //als de druk gelijk is aan de omgevingsdruk en de pomp staat uit, ga naar setpoint[x] en zet de pomp aan
+  {
+    if(setpoint[1])
+    {
+      digitalWrite(motorOutput ,HIGH);
+      Serial.println("Pil wordt opgepakt");
+    }
+  }
+  else if(pressure <= 100000 && digitalRead(motorOutput == HIGH)) //als de druk lager is aan de omgevingsdruk en de pomp staat aan, ga naar de dosseerplek en zet de pomp uit
+  {
+    if(setpointEind)
+    {
+      Serial.println("Pil wordt door gevoerd");
+      digitalWrite(motorOutput ,LOW);
+      Serial.println("pil wordt gedosseerd");
+    }
+  }
+}
+
+void Wat_Veranderd()
+{
+  if ( millis() > Tijd_Nu + Wacht_tijd  )
+  {
+    if (digitalRead (2) == HIGH) // Wanneer welke pillenbak verandert moet worden moet pin 2 aan 5volt worden aangesloten.
+    {
+      if (analogRead(X_pin_1 ) >= 0 && analogRead(X_pin_1 ) <= 50 && analogRead(Y_pin_1) >= 300 && analogRead(Y_pin_1) <= 700)// Joystick gaat naar rechts.)
+      {
+        pil = pil + 1;            // Wat er wordt ingesteld gaat een waarde naar rechts
+        Tijd_Nu = millis();
+
+
+      }
+      if (analogRead(X_pin_1) <= 1023 && analogRead(X_pin_1 ) >= 950 && analogRead(Y_pin_1) >= 300 && analogRead(Y_pin_1) <= 700) // Joystick gaat naar links.
+      {
+        pil = pil - 1;          
+        Tijd_Nu = millis();
+      }
+    }
+    if (digitalRead (2) == LOW) // Wanneer wat er bij een pillenbak moet worden verandert, moet pin 2 aan de ground worden aangesloten.
+    {
+      if (analogRead(X_pin_1 ) >= 0 && analogRead(X_pin_1 ) <= 50 && analogRead(Y_pin_1) >= 300 && analogRead(Y_pin_1) <= 700) // Joystick gaat naar rechts.
+      {
+        tijd = tijd + 1;        // Voor het instellen van welke datum soort (jaar, maand enz...) of hoe de pil moet worden ingenomen.
+        Tijd_Nu = millis();     // Is ervoor om een delay intestellen zonder dat het hele programma wordt delayed.
+      }
+      if (analogRead(X_pin_1) <= 1023 && analogRead(X_pin_1 ) >= 950 && analogRead(Y_pin_1) >= 300 && analogRead(Y_pin_1) <= 700) // Joystick gaat naar links.
+      {
+        tijd  = tijd - 1;        // Voor het instellen van welke datum soort (jaar, maand enz...) of hoe de pil moet worden ingenomen.
+        Tijd_Nu = millis();      // Is ervoor om een delay intestellen zonder dat het hele programma wordt delayed.
+      }
+    }
+  }
+}
+void Tijd_Veranderen ()
+{
+  if ( millis() > Tijd_Nu + Wacht_tijd  )  // Dit zorgt ervoor dat de waarde  maar met 1 kan veranderen per 0.2 seconden
+  {
+    if (analogRead(Y_pin_1 ) >= 0 && analogRead(Y_pin_1 ) <= 50 && analogRead(X_pin_1) >= 300 && analogRead(X_pin_1) <= 700)// Joystick gaat naar beneden.
+    {
+      Welke_Pil[pil][tijd] = Welke_Pil[pil][tijd] + 1; // De datum of de manier van hoe de pillenbak moet worden ingenomen wordt verandert.
+      Tijd_Nu = millis();     // Is ervoor om een delay intestellen zonder dat het hele programma wordt delayed.
+
+    }
+    if (analogRead(Y_pin_1) <= 1023 && analogRead(Y_pin_1 ) >= 950 && analogRead(X_pin_1) >= 300 && analogRead(X_pin_1) <= 700) // Joystick gaat naar boven.
+    {
+      Welke_Pil[pil][tijd] = Welke_Pil[pil][tijd] - 1; // De datum of de manier van hoe de pillenbak moet worden ingenomen wordt veranderd.
+      Tijd_Nu = millis();     // Is ervoor om een delay intestellen zonder dat het hele programma wordt delayed.
+
+    }
+  }
+  ingesteld = 1;
+}
+void Het_Klaar_Zetten_Pil()
+{
+  for (char i = 0; i < sizeof pil; i++)
+  {
+    if (now.year() == Welke_Pil[i][0] && now.month() == Welke_Pil[i][1 ] && now.day() == Welke_Pil[i][2] && now.hour() == Welke_Pil[i][3] && now.minute() == Welke_Pil[i][4] - 3) // Dit is dat de machine de pil 3 minuten voordat de patient het moet innemen het klaar zet
+    {
+      pilselectie(pilC);
+    }
+
+  }
+}
+void  Alarm_Doorgeef()
+{
+  unsigned long Tijd = 0;
+  for (char  i = 0; i < sizeof pil; i++)
+  {
+    if (now.year() == Welke_Pil[i][0] && now.month() == Welke_Pil[i][1 ] && now.day() == Welke_Pil[i][2] && now.hour() == Welke_Pil[i][3] && now.minute() == Welke_Pil[i][4]) // De pil moet nu worden ingenomen, de gebruiker krijgt een seintje door.
+    {
+      mySwitch.switchOn("11111", "00010");   // Er wordt een bepaalde seintje verzonden aan de receiver dat de trilmotor aan moet.
+    }
+    if ( HAHA - Tijd == Zendt_Tijd)  // Na 3 seconden zenden stopt de RF module met zenden
+    {
+      mySwitch.switchOff("11111", "00010");  // Er wordt een bepaalde seintje verzonden aan de receiver dat de trilmotor uit moet
+      Tijd = millis();   // Is ervoor om een delay intestellen zonder dat het hele programma wordt delayed.
+    }
+  }
+}
+
+
+void Display_zonder_Display ()
 {
 
+  if (pil >  Hoeveelheid_Pillen)  // Deze if statements zijn ervoor dat er niet meer dan pillen of instel mogelijkheden worden ingevoerd dan het maximum.
+  {
+    pil = 0;
+  }
+  if (pil < 0)
+  {
+    pil =   Hoeveelheid_Pillen;
+  }
+  if (tijd >  Instel_Mogelijkheden)
+  {
+    tijd = 0;
+  }
+  if ( tijd < 0)
+  {
+    tijd = Instel_Mogelijkheden ;
+  }
+  if   (digitalRead (3) == HIGH)   // Dit is voor wanneer de verpleegkundige iets wilt invoeren.
+  {
+    if (d == 0)    // Wanneer het instellen van de display voor het eerst aangaat wordt aangegeven welke pillenbak er geselecteerd is.
+    {
+      u8g2.clearBuffer();          // internal memory wordt gewist van de display
+      u8g2.setFont(u8g2_font_ncenB08_tr); // Bepaalde font die gekozen is voor de display
+      u8g2.drawStr(0, 10, "U heeft pillenbak "); // drawSTR betekend dat wat er staat wordt geschreven op de display. (x-as,y-as, "tekst" ).
+      u8g2.drawStr(0, 10, (int)pil);   // (x-as,y-as, variable)
+      u8g2.drawStr(30, 10, "geselecteerd "); // write something to the internal memory
+      u8g2.sendBuffer();          //  De interne memory wordt gestuurd naar de display.
+
+    }
+    if ((pil_oud - pil  >= 1) || (pil_oud - pil <= -1) )  // Wanneer er na het opstarten een andere pillenbak is geselecteerd wordt dat met dit stukje code aangegeven.
+    {
+      u8g2.clearBuffer();
+      u8g2.setFont(u8g2_font_ncenB08_tr); // Uitleg wat de commands beteken staan aan de bovenkant van deze functie.
+      u8g2.drawStr(0, 10, "U heeft pillenbak ");
+      u8g2.drawStr(25, 10, ( int )pil);
+      u8g2.drawStr(30, 10, "geselecteerd ");
+      u8g2.sendBuffer();
+    }
+    if (tijd_oud - tijd >= 1 || tijd_oud - tijd <= -1  )  // Deze if statement is ervoor om het gene wat ze willen veranderen te laten zien.
+    {
+      switch  ( tijd)
+      {
+        case 0:
+          u8g2.clearBuffer();  // Uitleg wat de commands beteken staan aan de bovenkant van deze functie.
+          u8g2.setFont(u8g2_font_ncenB08_tr);
+          u8g2.drawStr(0, 10, "U heeft datum type jaar geselecteerd\n");
+          u8g2.sendBuffer();
+          break;
+        case 1:
+          u8g2.clearBuffer();   // Uitleg wat de commands beteken staan aan de bovenkant van deze functie.
+          u8g2.setFont(u8g2_font_ncenB08_tr);
+          u8g2.drawStr(0, 10, "U heeft datum type maand geselecteerd\n");
+          u8g2.sendBuffer();
+          break;
+        case 2:
+          u8g2.clearBuffer();   // Uitleg wat de commands beteken staan aan de bovenkant van deze functie.
+          u8g2.setFont(u8g2_font_ncenB08_tr);
+          u8g2.drawStr(0, 10, "U heeft datum type dag geselecteerd\n");
+          u8g2.sendBuffer();
+          break;
+        case 3:
+          u8g2.clearBuffer();  // Uitleg wat de commands beteken staan aan de bovenkant van deze functie.
+          u8g2.setFont(u8g2_font_ncenB08_tr);
+          u8g2.drawStr(0, 10, "U heeft datum type uur geselecteerd\n");
+          u8g2.sendBuffer();
+          break;
+        case 4:
+          u8g2.clearBuffer(); // Uitleg wat de commands beteken staan aan de bovenkant van deze functie.
+          u8g2.setFont(u8g2_font_ncenB08_tr);
+          u8g2.drawStr(0, 10, "U heeft datum type minuut geselecteerd\n");
+          u8g2.sendBuffer();
+          break;
+        case 5:
+          u8g2.clearBuffer(); // Uitleg wat de commands beteken staan aan de bovenkant van deze functie.
+          u8g2.setFont(u8g2_font_ncenB08_tr);
+          u8g2.drawStr(0, 10, "U  heeft hoe de patient de pil moet nemen geselecteerd");
+          u8g2.sendBuffer();
+          break;
+      }
+    }
+    else if (Welke_Pil_Oud - Welke_Pil[pil][tijd] == 1 || Welke_Pil_Oud - Welke_Pil[pil][tijd] == -1 && a == 0)  // Deze if statement is ervoor om op de dislay te laten zien de hoeveelheid van wat de persoon bij welke pillenbak aan het instellen is.
+    {
+      if (tijd == 0)
+      {
+        u8g2.clearBuffer(); // Uitleg wat de commands beteken staan aan de bovenkant van deze functie.
+        u8g2.setFont(u8g2_font_ncenB08_tr);
+        u8g2.drawStr(0, 10, "Bij pil ");
+        u8g2.drawStr(25, 10, ( int )pil);
+        u8g2.drawStr(30, 10, "is het jaar ");
+        u8g2.drawStr(25, 10, (int)Welke_Pil[pil][tijd]);
+        u8g2.drawStr(0, 10, "Ingesteld ");
+        u8g2.sendBuffer();
+      }
+      if (tijd == 1)
+      {
+        u8g2.clearBuffer();  // Uitleg wat de commands beteken staan aan de bovenkant van deze functie.
+        u8g2.setFont(u8g2_font_ncenB08_tr);
+        u8g2.drawStr(0, 10, "Bij pil ");
+        u8g2.drawStr(25, 10, ( int )pil);
+        u8g2.drawStr(30, 10, "is de maand");
+        u8g2.drawStr(25, 10, (int)Welke_Pil[pil][tijd]);
+        u8g2.drawStr(0, 10, "Ingesteld ");
+        u8g2.sendBuffer();
+      }
+      if (tijd == 2)
+      {
+        u8g2.clearBuffer();  // Uitleg wat de commands beteken staan aan de bovenkant van deze functie.
+        u8g2.setFont(u8g2_font_ncenB08_tr);
+        u8g2.drawStr(0, 10, "Bij pil ");
+        u8g2.drawStr(25, 10, ( int )pil);
+        u8g2.drawStr(30, 10, "is de dag");
+        u8g2.drawStr(25, 10, (int)Welke_Pil[pil][tijd]);
+        u8g2.drawStr(0, 10, "Ingesteld ");
+        u8g2.sendBuffer();
+      }
+      if (tijd == 3)
+      {
+        u8g2.clearBuffer();  // Uitleg wat de commands beteken staan aan de bovenkant van deze functie.
+        u8g2.setFont(u8g2_font_ncenB08_tr);
+        u8g2.drawStr(0, 10, "Bij pil ");
+        u8g2.drawStr(25, 10, ( int )pil);
+        u8g2.drawStr(30, 10, "is het uur");
+        u8g2.drawStr(25, 10, (int)Welke_Pil[pil][tijd]);
+        u8g2.drawStr(0, 10, "Ingesteld ");
+        u8g2.sendBuffer();
+      }
+      if (tijd == 4)
+      {
+        u8g2.clearBuffer();  // Uitleg wat de commands beteken staan aan de bovenkant van deze functie.
+        u8g2.setFont(u8g2_font_ncenB08_tr);
+        u8g2.drawStr(0, 10, "Bij pil ");
+        u8g2.drawStr(25, 10, ( int )pil);
+        u8g2.drawStr(30, 10, "is het minuut");
+        u8g2.drawStr(25, 10, (int)Welke_Pil[pil][tijd]);
+        u8g2.drawStr(0, 10, "Ingesteld ");
+        u8g2.sendBuffer();
+      }
+      if (tijd == 5)
+      {
+        if (( int)Welke_Pil[pil][5] == 0)   // Deze if statement is ervoor om op de display bij het instellen te laten zien hoe de bepaalde pil ingenomen wordt.
+        {
+          u8g2.clearBuffer();  // Uitleg wat de commands beteken staan aan de bovenkant van deze functie.
+          u8g2.setFont(u8g2_font_ncenB08_tr);
+          u8g2.drawStr(0, 10, "Bij pil ");
+          u8g2.drawStr(25, 10, ( int )pil);
+          u8g2.drawStr(30, 10, "Moet het geprakt worden");
+          u8g2.sendBuffer();
+        }
+        if (( int)Welke_Pil[pil][tijd] == 1)
+        {
+          u8g2.clearBuffer();   // Uitleg wat de commands beteken staan aan de bovenkant van deze functie.
+          u8g2.setFont(u8g2_font_ncenB08_tr);
+          u8g2.drawStr(0, 10, "Bij pil ");
+          u8g2.drawStr(25, 10, ( int )pil);
+          u8g2.drawStr(30, 10, "Moet het met water genomen worden");
+          u8g2.sendBuffer();
+
+        }
+        if (( int)Welke_Pil[pil][tijd] == 2)
+        {
+          u8g2.clearBuffer();   // Uitleg wat de commands beteken staan aan de bovenkant van deze functie.
+          u8g2.setFont(u8g2_font_ncenB08_tr);
+          u8g2.drawStr(0, 10, "Bij pil ");
+          u8g2.drawStr(25, 10, ( int )pil);
+          u8g2.drawStr(30, 10, "Moet het met vla genomen worden");
+          u8g2.sendBuffer();
+        }
+      }
+    }
+  }
+  for (char i = 0; i < sizeof Hoeveelheid_Pillen ; i++ )
+  {
+    if (now.year() == Welke_Pil[i][0] && now.month() == Welke_Pil[i][1 ] && now.day() == Welke_Pil[i][2] && now.hour() == Welke_Pil[i][3] && now.minute() == Welke_Pil[i][4]  )  // dit is voor de display met het innemen van de pllen.
+    {
+      if (Welke_Pil[i][5] == 1)
+      {
+        u8g2.clearBuffer();
+        u8g2.setFont(u8g2_font_ncenB08_tr);
+        u8g2.drawStr(0, 10, "Neem de pil geprakt ");
+        u8g2.sendBuffer();
+      }
+      if (Welke_Pil[i][5] == 2)
+      {
+        u8g2.clearBuffer();
+        u8g2.setFont(u8g2_font_ncenB08_tr);
+        u8g2.drawStr(0, 10, "Neem de pil met water ");
+        u8g2.sendBuffer();
+      }
+      if  (Welke_Pil[i][5] == 3)
+      {
+        u8g2.clearBuffer();
+        u8g2.setFont(u8g2_font_ncenB08_tr);
+        u8g2.drawStr(0, 10, "Neem de pil met water ");
+        u8g2.sendBuffer();
+      }
+    }
+  }
+  pil_oud = pil;  // De variable naam_oud is ervoor om een vergelijking te maken waarbij te zien is of de persoon die aan het instellen is iets aan het veranderen is.
+  tijd_oud = tijd  ;
+  Welke_Pil_Oud = Welke_Pil[pil][tijd];
+}
+void  Limiet_Array_Datum()
+{
+  for (char i = 0; i < Hoeveelheid_Pillen; i++) // De for statement is ervoor om elke pillenbak langs te gaan.
+  {
+
+    if (Welke_Pil[i][0] > 2050 || Welke_Pil[i][0] < now.year())  // Deze if statement is ervoor dat het jaar niet te ver in de toekomst kan worden ingesteld en niet in het verleden
+    {
+      Welke_Pil[i][0] = now.year();
+    }
+    if (Welke_Pil[i][1] > 12 || Welke_Pil[i][1] < 0) // Maanden kunnen niet onder de nul worden insteld en niet boven de 12
+    {
+      Welke_Pil[i][1] = now.month();
+    }
+    if (Welke_Pil[i][2] > 31 || Welke_Pil[i][2] < 0) // Dagen kunnen niet onder de nul worden insteld en niet boven de 31
+    {
+      Welke_Pil[i][2] = now.day();
+    }
+    if (Welke_Pil[i][3] > 24 || Welke_Pil[i][3] < 0)  // Uren kunnen niet onder de nul worden insteld en niet boven de 24
+    {
+      Welke_Pil[i][3] = now.hour();
+    }
+    if (Welke_Pil[i][4] > 60 || Welke_Pil[i][4] < 0) // Minuten kunnen niet onder de nul worden insteld en niet boven de 60
+    {
+      Welke_Pil[i][4] = now.minute();
+    }
+  }
+}
+
+void bakje()
+{
+    Serial.println("delta arm naar bakje" );
+    printpositie(0);
+    digitalWrite(moterOutput, Aan);
+    PressureRead(VoltageToPressure());
+    hoekberekenen(Posities[0][0],Posities[0][1],Posities[0][2]);
+    digitalWrite(moterOutput, Uit);
 }
