@@ -1,10 +1,11 @@
 //library's
 #include <math.h>
 #include <Servo.h>
-#include <U8g2lib.h>
 #include "RTClib.h"
 #include <RCSwitch.h>
 #include <Wire.h>
+#include <U8g2lib.h>
+
 
 #define Aan HIGH
 #define Uit LOW
@@ -16,6 +17,7 @@
 #define Hoeveelheid_Pillen  4  // dit is een variable die aangeeft hoeveel pillen er in het systeem zitten.
 
 Servo MyServo[3];
+
 //globale variabele 
 int Posities [22][3];   //twee-dementionale array waar de X,Y,Z waardes in komen van de verschillende posities 
 
@@ -62,7 +64,7 @@ float i;
 float hoek;
 double radialen;
 
-const char bakje = 0;
+const char hetbakje = 0;
 const char pilA = 1;
 const char pilB = 2;
 const char pilC = 3;
@@ -105,10 +107,9 @@ char klaar = 0;
 char tijd_alarm = 20;
 int Zendt_Tijd = 300;
 char a = 0;
-char j;
 int buf;
 
-RTC_DS3231 rtc;   // tijd clock module die er gebruikt wordt.
+DS3231 rtc;   // tijd clock module die er gebruikt wordt.
 RCSwitch mySwitch = RCSwitch();  // Voor de RF module
 DateTime now = rtc.now() ;
 U8G2_ST7920_128X64_F_SW_SPI u8g2(U8G2_R0, /* clock=*/ 13, /* data=*/ 11, /* CS=*/ 10, /* reset=*/ 8);    // De pins waar de display op aangesloten moet.
@@ -158,34 +159,21 @@ void setup() {
     }
     X = X + 10; //elke rij zit 1cm uit elkaar
   }
-  
-  //testen van elke positie met elke hoek
- /* for (j=0; j<22; j++)
-  {
-    Serial.print("positie");
-    Serial.print(j);
-    Serial.print(" X= ");
-    Serial.print(Posities[j][0]);
-    Serial.print(" Y= ");
-    Serial.print(Posities[j][1]);  
-    Serial.print(" Z= ");
-    Serial.println(Posities[j][2]); 
-    hoekberekenen(Posities[j][0],Posities[j][1],Posities[j][2]);
-  }*/
 }
-
 void loop() 
 {
-while(ingesteld = 0)
-  HAHA = millis();
-  Wat_Veranderd();
-  Tijd_Veranderen ();
-  Display_zonder_Display ();
-  Limiet_Array_Datum();
+  while(ingesteld = 0)
+  {
+    HAHA = millis();
+    Wat_Veranderd();
+    Tijd_Veranderen ();
+    Display_zonder_Display ();
+    Limiet_Array_Datum();
   }
   Het_Klaar_Zetten_Pil();
-  if(klaar == 1){
-  Alarm_Doorgeef();
+  if(klaar == 1)
+  {
+    Alarm_Doorgeef();
   }
   delay(500);
 }
@@ -288,9 +276,9 @@ void hoekberekenen(float Xbepalen, float Ybepalen, float Zbepalen)
 //deze functie kijkt waar de delta arm heen moet en zorgt dat de juiste pil opgepakt wordt
 void pilselectie(char pilkeuze)
 {
-  While(klaar = 0)
+  while(klaar = 0)
   //stuurt de delta arm naar pil A
-  else if (pilkeuze == 1)
+   if (pilkeuze == 1)
   {
     Serial.println("Delta arm naar pil A");
     printpositie(pilAcounter);
@@ -702,10 +690,10 @@ void  Limiet_Array_Datum()
 
 void bakje()
 {
-    Serial.println("delta arm naar bakje" );
-    printpositie(0);
-    digitalWrite(moterOutput, Aan);
-    PressureRead(VoltageToPressure());
-    hoekberekenen(Posities[0][0],Posities[0][1],Posities[0][2]);
-    digitalWrite(moterOutput, Uit);
+  Serial.println("delta arm naar bakje");
+  printpositie(0);
+  digitalWrite(motorOutput, Aan);
+  PressureRead(VoltageToPressure());
+  hoekberekenen(Posities[0][0],Posities[0][1],Posities[0][2]);
+  digitalWrite(motorOutput, Uit);
 }
